@@ -1,0 +1,1507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>K8s Namespace Resource Quota Calculator</title>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #f8f9fa;
+            --surface: #ffffff;
+            --surface-2: #f1f3f5;
+            --border: #dee2e6;
+            --border-focus: #4c7eff;
+            --text: #212529;
+            --text-muted: #6c757d;
+            --primary: #4c7eff;
+            --primary-hover: #3a6aee;
+            --danger: #e03131;
+            --danger-hover: #c92a2a;
+            --success: #2f9e44;
+            --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            --radius: 6px;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 14px;
+            color: var(--text);
+            background: var(--bg);
+            min-height: 100vh;
+        }
+
+        /* Layout */
+        .app-header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: var(--shadow);
+        }
+
+        .app-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            padding: 12px 0;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0;
+        }
+
+        .tab-btn {
+            padding: 14px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-muted);
+            border-bottom: 2px solid transparent;
+            transition: color 0.15s, border-color 0.15s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text);
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 0;
+            min-height: calc(100vh - 49px);
+        }
+
+        .builder-content {
+            padding: 20px 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sidebar {
+            border-left: 1px solid var(--border);
+            background: var(--surface);
+            position: sticky;
+            top: 49px;
+            height: calc(100vh - 49px);
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Cards / Panels */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .card-header:hover {
+            background: var(--surface-2);
+        }
+
+        .card-header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .collapse-icon {
+            font-size: 10px;
+            color: var(--text-muted);
+            transition: transform 0.2s;
+        }
+
+        .collapsed .collapse-icon {
+            transform: rotate(-90deg);
+        }
+
+        .card-body {
+            padding: 16px;
+        }
+
+        .card.collapsed .card-body {
+            display: none;
+        }
+
+        /* Global settings */
+        .settings-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+        }
+
+        .settings-row label {
+            font-weight: 500;
+        }
+
+        /* Form controls */
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 6px 10px;
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--text);
+            background: var(--surface);
+            transition: border-color 0.15s, box-shadow 0.15s;
+            outline: none;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus,
+        textarea:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 2px rgba(76, 126, 255, 0.15);
+        }
+
+        input[type="number"] {
+            width: 80px;
+        }
+
+        input[type="number"].wide {
+            width: 100px;
+        }
+
+        input[type="text"] {
+            width: 160px;
+        }
+
+        input[type="text"].narrow {
+            width: 120px;
+        }
+
+        select {
+            padding-right: 24px;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            border-color: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text);
+            border-color: var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--surface-2);
+        }
+
+        .btn-danger {
+            background: none;
+            color: var(--danger);
+            border-color: var(--border);
+        }
+
+        .btn-danger:hover {
+            background: #fff0f0;
+            border-color: var(--danger);
+        }
+
+        .btn-ghost {
+            background: none;
+            color: var(--text-muted);
+            border-color: transparent;
+            padding: 4px 8px;
+        }
+
+        .btn-ghost:hover {
+            color: var(--danger);
+            background: #fff0f0;
+        }
+
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        /* Table-style rows */
+        .table-header, .table-row {
+            display: grid;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+        }
+
+        .table-header {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+            margin-bottom: 4px;
+        }
+
+        .table-row {
+            border-bottom: 1px solid var(--surface-2);
+        }
+
+        .table-row:last-child {
+            border-bottom: none;
+        }
+
+        /* Sidecar table: name, cpuReq, cpuLim, memReq, memLim, delete */
+        .sidecar-grid {
+            grid-template-columns: 1fr 72px 72px 72px 72px 36px;
+        }
+
+        /* Custom type table: name, surgeCapable, delete */
+        .type-grid {
+            grid-template-columns: 1fr 100px 36px;
+        }
+
+        .toggle-wrap {
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Toggle / checkbox */
+        .toggle {
+            position: relative;
+            width: 36px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--border);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            left: 3px;
+            top: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .toggle input:checked + .toggle-slider {
+            background: var(--primary);
+        }
+
+        .toggle input:checked + .toggle-slider::before {
+            transform: translateX(16px);
+        }
+
+        /* Workload card */
+        .workload-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 12px;
+        }
+
+        .workload-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-2);
+            border-radius: var(--radius) var(--radius) 0 0;
+            gap: 10px;
+        }
+
+        .workload-header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .workload-body {
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .field-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .field label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .field-inline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .field-inline label {
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .resources-grid {
+            display: grid;
+            grid-template-columns: repeat(4, auto);
+            gap: 10px;
+        }
+
+        .resources-header {
+            display: grid;
+            grid-template-columns: 80px repeat(4, auto);
+            gap: 10px;
+            align-items: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .sidecars-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .sidecars-group label.group-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            margin-bottom: 2px;
+        }
+
+        .sidecar-checks {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .sidecar-check {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--surface);
+            transition: background 0.1s, border-color 0.1s;
+        }
+
+        .sidecar-check:hover {
+            background: var(--surface-2);
+        }
+
+        .sidecar-check.checked {
+            background: rgba(76, 126, 255, 0.06);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .sidecar-check input[type="checkbox"] {
+            margin: 0;
+            accent-color: var(--primary);
+        }
+
+        /* Subtotals */
+        .subtotals {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: var(--mono);
+            background: var(--surface-2);
+            border-radius: 4px;
+            padding: 6px 10px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .subtotals span {
+            white-space: nowrap;
+        }
+
+        .subtotals strong {
+            color: var(--text);
+        }
+
+        /* Quota summary */
+        .quota-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .quota-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        .quota-tiles {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .quota-tile {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .quota-tile .tile-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .quota-tile .tile-value {
+            font-family: var(--mono);
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1.2;
+        }
+
+        .quota-tile .tile-value.zero {
+            color: var(--text-muted);
+        }
+
+        /* Breakdown table */
+        .breakdown-toggle {
+            font-size: 11px;
+            color: var(--primary);
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+
+        .breakdown-table {
+            font-size: 11px;
+            font-family: var(--mono);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .breakdown-table table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .breakdown-table th, .breakdown-table td {
+            padding: 5px 8px;
+            text-align: right;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .breakdown-table th {
+            background: var(--surface-2);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        .breakdown-table td:first-child, .breakdown-table th:first-child {
+            text-align: left;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            width: 65%;
+        }
+
+        .breakdown-table td:last-child, .breakdown-table th:last-child {
+            width: 35%;
+        }
+
+        .breakdown-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .breakdown-table .total-row td {
+            font-weight: 700;
+            background: var(--surface-2);
+            border-top: 2px solid var(--border);
+        }
+
+        /* JSON tab */
+        .json-tab-content {
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 900px;
+        }
+
+        .json-toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .json-status {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .json-status.error {
+            color: var(--danger);
+        }
+
+        .json-status.ok {
+            color: var(--success);
+        }
+
+        #json-textarea {
+            width: 100%;
+            height: calc(100vh - 200px);
+            font-family: var(--mono);
+            font-size: 12px;
+            line-height: 1.5;
+            resize: vertical;
+            border-radius: var(--radius);
+        }
+
+        /* Hidden / visible */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Separator */
+        .section-actions {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px 0 0;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: var(--surface-2);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+
+        .badge.builtin {
+            background: rgba(76, 126, 255, 0.08);
+            color: var(--primary);
+            border-color: rgba(76, 126, 255, 0.2);
+        }
+
+        .no-sidecars {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+<header class="app-header">
+    <span class="app-title">K8s Namespace Quota Calculator</span>
+    <nav class="tabs">
+        <button class="tab-btn active" data-tab="builder">Builder</button>
+        <button class="tab-btn" data-tab="json">JSON Config</button>
+    </nav>
+</header>
+
+<div id="tab-builder">
+    <div class="main-layout">
+        <!-- Left: Builder content -->
+        <div class="builder-content">
+
+            <!-- Global Settings -->
+            <div class="card">
+                <div class="settings-row">
+                    <label for="buffer-pct">Buffer %</label>
+                    <input id="buffer-pct" max="200" min="0" step="1" type="number" value="10">
+                    <span style="font-size:12px;color:var(--text-muted)">Added on top of all namespace totals</span>
+                </div>
+            </div>
+
+            <!-- Sidecar Definitions -->
+            <div class="card" id="sidecars-panel">
+                <div class="card-header" onclick="toggleCollapse('sidecars-panel')">
+                    <div class="card-header-left">
+                        <span class="collapse-icon">▼</span>
+                        Sidecar Definitions
+                    </div>
+                    <span class="badge" id="sidecar-count-badge">0 sidecars</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-header sidecar-grid">
+                        <span>Name</span>
+                        <span>CPU Req (m)</span>
+                        <span>CPU Lim (m)</span>
+                        <span>Mem Req (Mi)</span>
+                        <span>Mem Lim (Mi)</span>
+                        <span></span>
+                    </div>
+                    <div id="sidecar-rows"></div>
+                    <div class="section-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="addSidecar()">+ Add Sidecar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Workload Types -->
+            <div class="card" id="types-panel">
+                <div class="card-header" onclick="toggleCollapse('types-panel')">
+                    <div class="card-header-left">
+                        <span class="collapse-icon">▼</span>
+                        Workload Types
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-header type-grid">
+                        <span>Name</span>
+                        <span>Surge-capable</span>
+                        <span></span>
+                    </div>
+                    <div id="type-rows"></div>
+                    <div class="section-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="addCustomType()">+ Add Custom Type</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workloads -->
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h2 style="font-size:14px;font-weight:600;">Workloads</h2>
+                    <button class="btn btn-primary" onclick="addWorkload()">+ Add Workload</button>
+                </div>
+                <div id="workload-cards"></div>
+                <div id="no-workloads" style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">
+                    No workloads yet. Click <strong>+ Add Workload</strong> to get started.
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right: Quota Summary -->
+        <aside class="sidebar">
+            <div class="quota-panel">
+                <div class="quota-title">Namespace Quota</div>
+                <div class="quota-tiles" id="quota-tiles">
+                    <div class="quota-tile">
+                        <div class="tile-label">requests.cpu</div>
+                        <div class="tile-value zero" id="q-req-cpu">0</div>
+                    </div>
+                    <div class="quota-tile">
+                        <div class="tile-label">limits.cpu</div>
+                        <div class="tile-value zero" id="q-lim-cpu">0</div>
+                    </div>
+                    <div class="quota-tile">
+                        <div class="tile-label">requests.memory</div>
+                        <div class="tile-value zero" id="q-req-mem">0Gi</div>
+                    </div>
+                    <div class="quota-tile">
+                        <div class="tile-label">limits.memory</div>
+                        <div class="tile-value zero" id="q-lim-mem">0Gi</div>
+                    </div>
+                </div>
+
+                <button class="breakdown-toggle" onclick="toggleBreakdown()">
+                    <span id="breakdown-toggle-text">Show breakdown</span>
+                </button>
+
+                <div class="hidden" id="breakdown-section">
+                    <div id="breakdown-tables" style="display:flex;flex-direction:column;gap:8px;"></div>
+                </div>
+
+                <div style="font-size:11px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:10px;">
+                    <strong>Buffer:</strong> <span id="buffer-display">10%</span> included in totals above.
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<!-- JSON Tab -->
+<div class="hidden" id="tab-json">
+    <div class="json-tab-content">
+        <div class="json-toolbar">
+            <button class="btn btn-primary" onclick="applyJson()">Apply (Ctrl+Enter)</button>
+            <button class="btn btn-secondary" onclick="downloadJson()">Download JSON</button>
+            <button class="btn btn-danger" onclick="clearConfig()">Clear config</button>
+            <span class="json-status" id="json-status"></span>
+        </div>
+        <textarea id="json-textarea" spellcheck="false"></textarea>
+    </div>
+</div>
+
+<script>
+    // ─── Built-in data ───────────────────────────────────────────────────────────
+
+    const BUILTIN_TYPES = [
+        {name: 'Deployment', surgeCapable: true},
+        {name: 'StatefulSet', surgeCapable: false},
+        {name: 'DaemonSet', surgeCapable: false},
+        {name: 'Job', surgeCapable: false},
+        {name: 'KeeperCluster', surgeCapable: false},
+        {name: 'ClickHouseCluster', surgeCapable: false},
+    ];
+
+    const DEFAULT_SIDECARS = [
+        {id: uuid(), name: 'Istio Proxy', cpuRequest: 100, cpuLimit: 2000, memRequest: 128, memLimit: 256},
+        {id: uuid(), name: 'CloudSQL Proxy', cpuRequest: 50, cpuLimit: 100, memRequest: 64, memLimit: 128},
+        {id: uuid(), name: 'Redis Exporter', cpuRequest: 50, cpuLimit: 100, memRequest: 64, memLimit: 128},
+    ];
+
+    // ─── State ───────────────────────────────────────────────────────────────────
+
+    let state = {
+        bufferPercent: 10,
+        customWorkloadTypes: [],
+        sidecars: JSON.parse(JSON.stringify(DEFAULT_SIDECARS)),
+        workloads: [],
+    };
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+    function uuid() {
+        return crypto.randomUUID();
+    }
+
+    function allTypes() {
+        return [...BUILTIN_TYPES, ...state.customWorkloadTypes];
+    }
+
+    function typeByName(name) {
+        return allTypes().find(t => t.name === name) || BUILTIN_TYPES[0];
+    }
+
+    function sidecarById(id) {
+        return state.sidecars.find(s => s.id === id);
+    }
+
+    function fmtCpu(mCpu) {
+        const v = mCpu / 1000;
+        return Number.isInteger(v) ? v.toString() : parseFloat(v.toFixed(3)).toString();
+    }
+
+    function fmtMem(mi) {
+        const v = mi / 1024;
+        return (Number.isInteger(v) ? v.toString() : parseFloat(v.toFixed(3)).toString()) + 'Gi';
+    }
+
+    function calcWorkload(w) {
+        const type = typeByName(w.type);
+        const hpaActive = w.hpa && w.hpa.enabled;
+        const baseReplicas = hpaActive ? (w.hpa.maxReplicas || 1) : (w.replicas || 1);
+        const surgeAdd = type.surgeCapable ? (w.maxSurge || 0) : 0;
+        const effectiveReplicas = baseReplicas + surgeAdd;
+
+        const selectedSidecars = (w.sidecarIds || [])
+            .map(id => sidecarById(id))
+            .filter(Boolean);
+
+        const sidecarCpuReq = selectedSidecars.reduce((a, s) => a + s.cpuRequest, 0);
+        const sidecarCpuLim = selectedSidecars.reduce((a, s) => a + s.cpuLimit, 0);
+        const sidecarMemReq = selectedSidecars.reduce((a, s) => a + s.memRequest, 0);
+        const sidecarMemLim = selectedSidecars.reduce((a, s) => a + s.memLimit, 0);
+
+        const c = w.container || {};
+        const perPodCpuReq = (c.cpuRequest || 0) + sidecarCpuReq;
+        const perPodCpuLim = (c.cpuLimit || 0) + sidecarCpuLim;
+        const perPodMemReq = (c.memRequest || 0) + sidecarMemReq;
+        const perPodMemLim = (c.memLimit || 0) + sidecarMemLim;
+
+        return {
+            effectiveReplicas,
+            cpuReq: effectiveReplicas * perPodCpuReq,
+            cpuLim: effectiveReplicas * perPodCpuLim,
+            memReq: effectiveReplicas * perPodMemReq,
+            memLim: effectiveReplicas * perPodMemLim,
+        };
+    }
+
+    function calcTotals() {
+        const workloadTotals = state.workloads.map(calcWorkload);
+        const rawCpuReq = workloadTotals.reduce((a, t) => a + t.cpuReq, 0);
+        const rawCpuLim = workloadTotals.reduce((a, t) => a + t.cpuLim, 0);
+        const rawMemReq = workloadTotals.reduce((a, t) => a + t.memReq, 0);
+        const rawMemLim = workloadTotals.reduce((a, t) => a + t.memLim, 0);
+        const mult = 1 + (state.bufferPercent || 0) / 100;
+
+        return {
+            cpuReq: rawCpuReq * mult,
+            cpuLim: rawCpuLim * mult,
+            memReq: rawMemReq * mult,
+            memLim: rawMemLim * mult,
+            workloadTotals,
+        };
+    }
+
+    // ─── Persistence ─────────────────────────────────────────────────────────────
+
+    const LS_KEY = 'k8s-quota-calculator-state';
+
+    function saveToLocalStorage() {
+        try {
+            localStorage.setItem(LS_KEY, JSON.stringify(state));
+        } catch (_) {
+        }
+    }
+
+    // ─── State update ─────────────────────────────────────────────────────────────
+
+    function updateState(fn) {
+        fn(state);
+        cleanupSidecarRefs();
+        saveToLocalStorage();
+        render();
+    }
+
+    function cleanupSidecarRefs() {
+        const validIds = new Set(state.sidecars.map(s => s.id));
+        state.workloads.forEach(w => {
+            w.sidecarIds = (w.sidecarIds || []).filter(id => validIds.has(id));
+        });
+    }
+
+    // ─── Collapse ────────────────────────────────────────────────────────────────
+
+    function toggleCollapse(id) {
+        const el = document.getElementById(id);
+        el.classList.toggle('collapsed');
+    }
+
+    function toggleBreakdown() {
+        const sec = document.getElementById('breakdown-section');
+        const btn = document.getElementById('breakdown-toggle-text');
+        const visible = !sec.classList.contains('hidden');
+        sec.classList.toggle('hidden', visible);
+        btn.textContent = visible ? 'Show breakdown' : 'Hide breakdown';
+    }
+
+    // ─── Sidecar CRUD ────────────────────────────────────────────────────────────
+
+    function addSidecar() {
+        updateState(s => {
+            s.sidecars.push({
+                id: uuid(),
+                name: 'New Sidecar',
+                cpuRequest: 100,
+                cpuLimit: 200,
+                memRequest: 64,
+                memLimit: 128
+            });
+        });
+    }
+
+    function deleteSidecar(id) {
+        updateState(s => {
+            s.sidecars = s.sidecars.filter(sc => sc.id !== id);
+        });
+    }
+
+    function updateSidecar(id, field, value) {
+        const sc = state.sidecars.find(s => s.id === id);
+        if (!sc) return;
+        sc[field] = field === 'name' ? value : (parseInt(value) || 0);
+        renderQuotaAndSubtotals();
+    }
+
+    // ─── Custom Type CRUD ────────────────────────────────────────────────────────
+
+    function addCustomType() {
+        updateState(s => {
+            s.customWorkloadTypes.push({name: 'CustomType', surgeCapable: false});
+        });
+    }
+
+    function deleteCustomType(idx) {
+        updateState(s => {
+            s.customWorkloadTypes.splice(idx, 1);
+        });
+    }
+
+    function updateCustomType(idx, field, value) {
+        const t = state.customWorkloadTypes[idx];
+        if (!t) return;
+        if (field === 'name') t.name = value;
+        else if (field === 'surgeCapable') t.surgeCapable = value;
+        render();
+    }
+
+    // ─── Workload CRUD ───────────────────────────────────────────────────────────
+
+    function addWorkload() {
+        updateState(s => {
+            s.workloads.push({
+                id: uuid(),
+                name: 'new-workload',
+                type: 'Deployment',
+                replicas: 1,
+                maxSurge: 1,
+                hpa: {enabled: false, minReplicas: 1, maxReplicas: 5},
+                container: {cpuRequest: 100, cpuLimit: 200, memRequest: 128, memLimit: 256},
+                sidecarIds: [],
+            });
+        });
+    }
+
+    function deleteWorkload(id) {
+        updateState(s => {
+            s.workloads = s.workloads.filter(w => w.id !== id);
+        });
+    }
+
+    function duplicateWorkload(id) {
+        updateState(s => {
+            const src = s.workloads.find(w => w.id === id);
+            if (!src) return;
+            const copy = JSON.parse(JSON.stringify(src));
+            copy.id = uuid();
+            copy.name = src.name + '-cpy';
+            const idx = s.workloads.indexOf(src);
+            s.workloads.splice(idx + 1, 0, copy);
+        });
+    }
+
+    function updateWorkload(id, path, value) {
+        const w = state.workloads.find(w => w.id === id);
+        if (!w) return;
+        const parts = path.split('.');
+        let obj = w;
+        for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
+        const last = parts[parts.length - 1];
+        if (typeof value === 'boolean') obj[last] = value;
+        else if (last === 'name' || last === 'type') obj[last] = value;
+        else obj[last] = parseInt(value) || 0;
+        // Structural changes alter which fields are visible → full re-render.
+        // Value-only changes just update numbers in the sidebar and subtotals.
+        if (path === 'type' || path === 'hpa.enabled') render();
+        else renderQuotaAndSubtotals();
+    }
+
+    function toggleSidecar(workloadId, sidecarId, checked) {
+        const w = state.workloads.find(w => w.id === workloadId);
+        if (!w) return;
+        if (checked) {
+            if (!w.sidecarIds.includes(sidecarId)) w.sidecarIds.push(sidecarId);
+        } else {
+            w.sidecarIds = w.sidecarIds.filter(id => id !== sidecarId);
+        }
+        render();
+    }
+
+    // ─── Render ───────────────────────────────────────────────────────────────────
+
+    function render() {
+        renderSidecars();
+        renderTypes();
+        renderWorkloads();
+        renderQuota();
+    }
+
+    function subtotalsInnerHTML(t) {
+        return `<span>Eff. replicas: <strong>${t.effectiveReplicas}</strong></span>
+    <span>CPU req: <strong>${fmtCpu(t.cpuReq)}</strong></span>
+    <span>CPU lim: <strong>${fmtCpu(t.cpuLim)}</strong></span>
+    <span>Mem req: <strong>${fmtMem(t.memReq)}</strong></span>
+    <span>Mem lim: <strong>${fmtMem(t.memLim)}</strong></span>`;
+    }
+
+    function renderQuotaAndSubtotals() {
+        renderQuota();
+        state.workloads.forEach(w => {
+            const el = document.getElementById('subtotals-' + w.id);
+            if (el) el.innerHTML = subtotalsInnerHTML(calcWorkload(w));
+        });
+    }
+
+    function renderSidecars() {
+        const container = document.getElementById('sidecar-rows');
+        container.innerHTML = '';
+        state.sidecars.forEach(sc => {
+            const row = document.createElement('div');
+            row.className = 'table-row sidecar-grid';
+            row.innerHTML = `
+      <input type="text" value="${esc(sc.name)}" style="width:100%"
+        oninput="updateSidecar('${sc.id}','name',this.value)">
+      <input type="number" min="0" value="${sc.cpuRequest}"
+        oninput="updateSidecar('${sc.id}','cpuRequest',this.value)">
+      <input type="number" min="0" value="${sc.cpuLimit}"
+        oninput="updateSidecar('${sc.id}','cpuLimit',this.value)">
+      <input type="number" min="0" value="${sc.memRequest}"
+        oninput="updateSidecar('${sc.id}','memRequest',this.value)">
+      <input type="number" min="0" value="${sc.memLimit}"
+        oninput="updateSidecar('${sc.id}','memLimit',this.value)">
+      <button class="btn btn-ghost btn-sm" onclick="deleteSidecar('${sc.id}')" title="Delete">✕</button>
+    `;
+            container.appendChild(row);
+        });
+
+        const badge = document.getElementById('sidecar-count-badge');
+        badge.textContent = `${state.sidecars.length} sidecar${state.sidecars.length !== 1 ? 's' : ''}`;
+    }
+
+    function renderTypes() {
+        const container = document.getElementById('type-rows');
+        container.innerHTML = '';
+
+        // Built-in (read-only)
+        BUILTIN_TYPES.forEach(t => {
+            const row = document.createElement('div');
+            row.className = 'table-row type-grid';
+            row.innerHTML = `
+      <span style="font-size:13px;display:flex;align-items:center;gap:6px;">
+        ${esc(t.name)} <span class="badge builtin">built-in</span>
+      </span>
+      <div class="toggle-wrap">
+        <span style="font-size:12px;color:${t.surgeCapable ? 'var(--success)' : 'var(--text-muted)'}">
+          ${t.surgeCapable ? 'Yes' : 'No'}
+        </span>
+      </div>
+      <span></span>
+    `;
+            container.appendChild(row);
+        });
+
+        // Custom
+        state.customWorkloadTypes.forEach((t, idx) => {
+            const row = document.createElement('div');
+            row.className = 'table-row type-grid';
+            row.innerHTML = `
+      <input type="text" style="width:100%" value="${esc(t.name)}"
+        oninput="updateCustomType(${idx},'name',this.value)">
+      <div class="toggle-wrap">
+        <label class="toggle">
+          <input type="checkbox" ${t.surgeCapable ? 'checked' : ''}
+            onchange="updateCustomType(${idx},'surgeCapable',this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="deleteCustomType(${idx})" title="Delete">✕</button>
+    `;
+            container.appendChild(row);
+        });
+    }
+
+    function renderWorkloads() {
+        const container = document.getElementById('workload-cards');
+        const noWl = document.getElementById('no-workloads');
+        container.innerHTML = '';
+
+        if (state.workloads.length === 0) {
+            noWl.classList.remove('hidden');
+            return;
+        }
+        noWl.classList.add('hidden');
+
+        state.workloads.forEach(w => {
+            const type = typeByName(w.type);
+            const hpaActive = w.hpa && w.hpa.enabled;
+            const totals = calcWorkload(w);
+
+            const card = document.createElement('div');
+            card.className = 'workload-card';
+
+            const typeOptions = allTypes()
+                .map(t => `<option value="${esc(t.name)}" ${t.name === w.type ? 'selected' : ''}>${esc(t.name)}</option>`)
+                .join('');
+
+            const sidecarChecks = state.sidecars.length === 0
+                ? `<span class="no-sidecars">No sidecars defined</span>`
+                : state.sidecars.map(sc => {
+                    const checked = (w.sidecarIds || []).includes(sc.id);
+                    return `<label class="sidecar-check ${checked ? 'checked' : ''}">
+            <input type="checkbox" ${checked ? 'checked' : ''}
+              onchange="toggleSidecar('${w.id}','${sc.id}',this.checked)">
+            ${esc(sc.name)}
+          </label>`;
+                }).join('');
+
+            card.innerHTML = `
+      <div class="workload-header">
+        <div class="workload-header-left">
+          <input type="text" class="narrow" value="${esc(w.name)}"
+            oninput="updateWorkload('${w.id}','name',this.value)"
+            style="font-weight:600;width:180px;">
+          <select onchange="updateWorkload('${w.id}','type',this.value)">${typeOptions}</select>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="duplicateWorkload('${w.id}')">Duplicate</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteWorkload('${w.id}')">Delete</button>
+      </div>
+      <div class="workload-body">
+
+        <!-- Replicas / HPA -->
+        <div class="field-group">
+          ${!hpaActive ? `
+          <div class="field">
+            <label>Replicas</label>
+            <input type="number" min="1" value="${w.replicas || 1}"
+              oninput="updateWorkload('${w.id}','replicas',this.value)">
+          </div>` : ''}
+          ${type.surgeCapable ? `
+          <div class="field">
+            <label>Max Surge</label>
+            <input type="number" min="0" value="${w.maxSurge || 0}"
+              oninput="updateWorkload('${w.id}','maxSurge',this.value)">
+          </div>` : ''}
+          <div class="field-inline" style="align-self:flex-end;padding-bottom:2px;">
+            <label class="toggle">
+              <input type="checkbox" id="hpa-toggle-${w.id}" ${hpaActive ? 'checked' : ''}
+                onchange="updateWorkload('${w.id}','hpa.enabled',this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+            <label for="hpa-toggle-${w.id}" style="font-size:13px;cursor:pointer;">HPA</label>
+          </div>
+          ${hpaActive ? `
+          <div class="field">
+            <label>Min Replicas</label>
+            <input type="number" min="1" value="${w.hpa.minReplicas || 1}"
+              oninput="updateWorkload('${w.id}','hpa.minReplicas',this.value)">
+          </div>
+          <div class="field">
+            <label>Max Replicas</label>
+            <input type="number" min="1" value="${w.hpa.maxReplicas || 1}"
+              oninput="updateWorkload('${w.id}','hpa.maxReplicas',this.value)">
+          </div>` : ''}
+        </div>
+
+        <!-- Container Resources -->
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Container Resources</div>
+          <div class="field-group">
+            <div class="field">
+              <label>CPU Req (m)</label>
+              <input type="number" min="0" value="${(w.container || {}).cpuRequest || 0}"
+                oninput="updateWorkload('${w.id}','container.cpuRequest',this.value)">
+            </div>
+            <div class="field">
+              <label>CPU Lim (m)</label>
+              <input type="number" min="0" value="${(w.container || {}).cpuLimit || 0}"
+                oninput="updateWorkload('${w.id}','container.cpuLimit',this.value)">
+            </div>
+            <div class="field">
+              <label>Mem Req (Mi)</label>
+              <input type="number" min="0" value="${(w.container || {}).memRequest || 0}"
+                oninput="updateWorkload('${w.id}','container.memRequest',this.value)">
+            </div>
+            <div class="field">
+              <label>Mem Lim (Mi)</label>
+              <input type="number" min="0" value="${(w.container || {}).memLimit || 0}"
+                oninput="updateWorkload('${w.id}','container.memLimit',this.value)">
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidecars -->
+        <div class="sidecars-group">
+          <label class="group-label">Sidecars</label>
+          <div class="sidecar-checks">${sidecarChecks}</div>
+        </div>
+
+        <!-- Subtotals -->
+        <div class="subtotals" id="subtotals-${w.id}">${subtotalsInnerHTML(totals)}</div>
+
+      </div>
+    `;
+            container.appendChild(card);
+        });
+    }
+
+    function renderQuota() {
+        const totals = calcTotals();
+
+        const setTile = (id, value, isZero) => {
+            const el = document.getElementById(id);
+            el.textContent = value;
+            el.classList.toggle('zero', isZero);
+        };
+
+        setTile('q-req-cpu', fmtCpu(totals.cpuReq), totals.cpuReq === 0);
+        setTile('q-lim-cpu', fmtCpu(totals.cpuLim), totals.cpuLim === 0);
+        setTile('q-req-mem', fmtMem(totals.memReq), totals.memReq === 0);
+        setTile('q-lim-mem', fmtMem(totals.memLim), totals.memLim === 0);
+
+        document.getElementById('buffer-display').textContent = (state.bufferPercent || 0) + '%';
+
+        // Breakdown tables (one per quota field)
+        const container = document.getElementById('breakdown-tables');
+        container.innerHTML = '';
+
+        if (state.workloads.length === 0) return;
+
+        const mult = 1 + (state.bufferPercent || 0) / 100;
+        const multLabel = `×${parseFloat(mult.toFixed(4))}`;
+
+        const fields = [
+            {label: 'requests.cpu', getValue: t => fmtCpu(t.cpuReq), getTotal: () => fmtCpu(totals.cpuReq)},
+            {label: 'limits.cpu', getValue: t => fmtCpu(t.cpuLim), getTotal: () => fmtCpu(totals.cpuLim)},
+            {label: 'requests.memory', getValue: t => fmtMem(t.memReq), getTotal: () => fmtMem(totals.memReq)},
+            {label: 'limits.memory', getValue: t => fmtMem(t.memLim), getTotal: () => fmtMem(totals.memLim)},
+        ];
+
+        fields.forEach(field => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'breakdown-table';
+
+            const rows = totals.workloadTotals.map((t, i) => {
+                const w = state.workloads[i];
+                return `<tr>
+        <td title="${esc(w.name)}">${esc(w.name)}</td>
+        <td>${field.getValue(t)}</td>
+      </tr>`;
+            }).join('');
+
+            wrapper.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>${field.label}</th>
+          <th>Value</th>
+        </tr></thead>
+        <tbody>
+          ${rows}
+          <tr class="total-row">
+            <td>Total (${multLabel})</td>
+            <td>${field.getTotal()}</td>
+          </tr>
+        </tbody>
+      </table>`;
+
+            container.appendChild(wrapper);
+        });
+    }
+
+    function esc(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // ─── Buffer input ─────────────────────────────────────────────────────────────
+
+    document.getElementById('buffer-pct').addEventListener('input', function () {
+        state.bufferPercent = parseFloat(this.value) || 0;
+        renderQuota();
+    });
+
+    // ─── Tabs ─────────────────────────────────────────────────────────────────────
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            document.getElementById('tab-builder').classList.toggle('hidden', tab !== 'builder');
+            document.getElementById('tab-json').classList.toggle('hidden', tab !== 'json');
+
+            if (tab === 'json') {
+                document.getElementById('json-textarea').value = JSON.stringify(state, null, 2);
+                document.getElementById('json-status').textContent = '';
+            }
+        });
+    });
+
+    // ─── JSON tab ────────────────────────────────────────────────────────────────
+
+    document.getElementById('json-textarea').addEventListener('keydown', function (e) {
+        if (e.ctrlKey && e.key === 'Enter') {
+            e.preventDefault();
+            applyJson();
+        }
+    });
+
+    function applyJson() {
+        const statusEl = document.getElementById('json-status');
+        try {
+            const parsed = JSON.parse(document.getElementById('json-textarea').value);
+            // Basic validation
+            if (typeof parsed !== 'object' || parsed === null) throw new Error('Root must be an object');
+            if (!Array.isArray(parsed.workloads)) throw new Error('workloads must be an array');
+            if (!Array.isArray(parsed.sidecars)) throw new Error('sidecars must be an array');
+            if (!Array.isArray(parsed.customWorkloadTypes)) throw new Error('customWorkloadTypes must be an array');
+
+            state = parsed;
+            if (typeof state.bufferPercent !== 'number') state.bufferPercent = 10;
+            document.getElementById('buffer-pct').value = state.bufferPercent;
+
+            cleanupSidecarRefs();
+            saveToLocalStorage();
+            render();
+
+            statusEl.textContent = 'Applied successfully.';
+            statusEl.className = 'json-status ok';
+            setTimeout(() => {
+                statusEl.textContent = '';
+            }, 3000);
+        } catch (err) {
+            statusEl.textContent = 'Error: ' + err.message;
+            statusEl.className = 'json-status error';
+        }
+    }
+
+    function clearConfig() {
+        if (!confirm('Reset to default state and clear saved config?')) return;
+        localStorage.removeItem(LS_KEY);
+        state = {
+            bufferPercent: 10,
+            customWorkloadTypes: [],
+            sidecars: JSON.parse(JSON.stringify(DEFAULT_SIDECARS)),
+            workloads: [],
+        };
+        document.getElementById('buffer-pct').value = 10;
+        document.getElementById('json-textarea').value = JSON.stringify(state, null, 2);
+        document.getElementById('json-status').textContent = '';
+        render();
+    }
+
+    function downloadJson() {
+        const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'quota-config.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // ─── Init ────────────────────────────────────────────────────────────────────
+
+    (function loadFromLocalStorage() {
+        try {
+            const saved = localStorage.getItem(LS_KEY);
+            if (!saved) return;
+            const parsed = JSON.parse(saved);
+            if (typeof parsed !== 'object' || parsed === null) return;
+            if (!Array.isArray(parsed.workloads) || !Array.isArray(parsed.sidecars) || !Array.isArray(parsed.customWorkloadTypes)) return;
+            state = parsed;
+            if (typeof state.bufferPercent !== 'number') state.bufferPercent = 10;
+            document.getElementById('buffer-pct').value = state.bufferPercent;
+            cleanupSidecarRefs();
+        } catch (_) {
+        }
+    })();
+
+    render();
+</script>
+</body>
+</html>
