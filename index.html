@@ -114,6 +114,25 @@
             gap: 16px;
         }
 
+        @media (max-width: 768px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                order: -1;
+                position: static;
+                height: auto;
+                overflow-y: visible;
+                border-left: none;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .builder-content {
+                padding: 16px;
+            }
+        }
+
         /* Cards / Panels */
         .card {
             background: var(--surface);
