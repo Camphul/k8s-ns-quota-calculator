@@ -2,6 +2,8 @@
 
 > This tool was made with the help of AI
 
+[Check it out on github pages!](https://camphul.github.io/k8s-ns-quota-calculator/)
+
 Calculator to help configure Kubernetes namespace resource quotas
 
 A single-file, offline web tool for calculating Kubernetes namespace `ResourceQuota` values from a set of workloads. No server, no dependencies — just open `index.html` in a browser.
