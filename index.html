@@ -851,7 +851,7 @@
 
 <script>
     // ─── Built-in data ───────────────────────────────────────────────────────────
-
+    const DEFAULT_BUFFER_PCT = 5;
     const BUILTIN_TYPES = [
         {name: 'Deployment', surgeCapable: true},
         {name: 'StatefulSet', surgeCapable: false},
@@ -870,7 +870,7 @@
     // ─── State ───────────────────────────────────────────────────────────────────
 
     let state = {
-        bufferPercent: 10,
+        bufferPercent: DEFAULT_BUFFER_PCT,
         customWorkloadTypes: [],
         sidecars: JSON.parse(JSON.stringify(DEFAULT_SIDECARS)),
         workloads: [],
@@ -1439,7 +1439,7 @@
             if (!Array.isArray(parsed.customWorkloadTypes)) throw new Error('customWorkloadTypes must be an array');
 
             state = parsed;
-            if (typeof state.bufferPercent !== 'number') state.bufferPercent = 10;
+            if (typeof state.bufferPercent !== 'number') state.bufferPercent = DEFAULT_BUFFER_PCT;
             document.getElementById('buffer-pct').value = state.bufferPercent;
 
             cleanupSidecarRefs();
@@ -1466,7 +1466,7 @@
             sidecars: JSON.parse(JSON.stringify(DEFAULT_SIDECARS)),
             workloads: [],
         };
-        document.getElementById('buffer-pct').value = 10;
+        document.getElementById('buffer-pct').value = DEFAULT_BUFFER_PCT;
         document.getElementById('json-textarea').value = JSON.stringify(state, null, 2);
         document.getElementById('json-status').textContent = '';
         render();
@@ -1494,7 +1494,7 @@
             if (typeof parsed !== 'object' || parsed === null) return;
             if (!Array.isArray(parsed.workloads) || !Array.isArray(parsed.sidecars) || !Array.isArray(parsed.customWorkloadTypes)) return;
             state = parsed;
-            if (typeof state.bufferPercent !== 'number') state.bufferPercent = 10;
+            if (typeof state.bufferPercent !== 'number') state.bufferPercent = DEFAULT_BUFFER_PCT;
             document.getElementById('buffer-pct').value = state.bufferPercent;
             cleanupSidecarRefs();
         } catch (_) {
