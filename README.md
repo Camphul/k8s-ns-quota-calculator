@@ -20,7 +20,7 @@ A single-file, offline web tool for calculating Kubernetes namespace `ResourceQu
 ## How to use
 
 1. Clone or download the repo and open `index.html` in any modern browser — no server needed.
-2. **Set a buffer %** (default 10%) in the Global Settings row to add headroom on top of calculated totals.
+2. **Set a buffer %** (default 5%) in the Global Settings row to add headroom on top of calculated totals.
 3. **Define sidecars** in the Sidecar Definitions panel. Three common ones are pre-populated; add, edit, or delete as needed.
 4. **Add workloads** with the *+ Add Workload* button. For each workload configure:
    - Name and type (Deployment, StatefulSet, DaemonSet, Job, or a custom type)
