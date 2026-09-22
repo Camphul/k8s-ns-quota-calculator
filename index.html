@@ -732,7 +732,7 @@
             <div class="card">
                 <div class="settings-row">
                     <label for="buffer-pct">Buffer %</label>
-                    <input id="buffer-pct" max="200" min="0" step="1" type="number" value="10">
+                    <input id="buffer-pct" max="200" min="0" step="1" type="number">
                     <span style="font-size:12px;color:var(--text-muted)">Added on top of all namespace totals</span>
                 </div>
             </div>
@@ -1500,7 +1500,7 @@
         } catch (_) {
         }
     })();
-
+    document.getElementById('buffer-pct').value = state.bufferPercent;
     render();
 </script>
 </body>
